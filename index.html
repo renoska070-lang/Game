@@ -1,0 +1,98 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Neon Survivors</title>
+<style>
+html,body{margin:0;height:100%;background:#0a0a18;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;font-family:system-ui,sans-serif;color:#fff}
+canvas{display:block;width:100%;height:100%}
+.ov{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,5,20,.9);padding:20px;box-sizing:border-box;text-align:center;gap:10px;overflow:auto}
+.ov.on{display:flex}
+h1{margin:0;font-size:38px;color:#0ff;text-shadow:0 0 18px #0ff}
+h2{margin:0;color:#f35}
+p{margin:2px;opacity:.85}
+button{background:#12304a;border:2px solid #0ff;color:#fff;font-size:17px;padding:12px 16px;border-radius:12px;width:min(320px,90%)}
+button:active{background:#0aa}
+</style></head><body>
+<canvas id="c"></canvas>
+<div class="ov on" id="m"><h1>NEON<br>SURVIVORS</h1>
+<p>Рекорд: <b id="mb">0</b> сек &nbsp; 💰 <b id="mc">0</b></p>
+<p>Двигай пальцем — герой стреляет сам.<br>Выживай, качайся, бей боссов!</p>
+<button onclick="start()">▶ ИГРАТЬ</button><button onclick="shop()">⚙ УЛУЧШЕНИЯ</button></div>
+<div class="ov" id="lv"><h2 style="color:#0f8">УРОВЕНЬ!</h2><div id="opts" style="display:contents"></div></div>
+<div class="ov" id="sh"><h1 style="font-size:28px">УЛУЧШЕНИЯ</h1><p>💰 <b id="sc">0</b></p><div id="sl" style="display:contents"></div><button onclick="menu()">← Назад</button></div>
+<div class="ov" id="ov"><h2>ТЫ ПОГИБ</h2><p id="rs"></p><button onclick="start()">↻ ЕЩЁ РАЗ</button><button onclick="menu()">В меню</button></div>
+<script>
+const $=id=>document.getElementById(id),cv=$('c'),cx=cv.getContext('2d');
+let W,H,ox=0,oy=0;
+function rs(){const d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*d;cv.height=H*d;cx.setTransform(d,0,0,d,0,0)}
+addEventListener('resize',rs);rs();
+let save;try{save=JSON.parse(localStorage.ns)}catch(e){}
+save=save||{coins:0,best:0,up:{dmg:0,hp:0,spd:0,mag:0}};
+const sv=()=>{try{localStorage.ns=JSON.stringify(save)}catch(e){}};
+const UP={dmg:['Сила',50,'+10% урона'],hp:['Здоровье',50,'+20 HP'],spd:['Скорость',60,'+5% скорости'],mag:['Магнит',40,'+20% радиус сбора']};
+const UPG=[
+{n:'🔫 Урон +25%',f:p=>p.dmg*=1.25},
+{n:'⚡ Скорострельность +20%',f:p=>p.rate*=1.2},
+{n:'✴️ Доп. снаряд',f:p=>p.multi++,mx:p=>p.multi<6},
+{n:'🎯 Пробивание +1',f:p=>p.pierce++,mx:p=>p.pierce<5},
+{n:'👟 Скорость +12%',f:p=>p.spd*=1.12},
+{n:'🧲 Магнит +40%',f:p=>p.mag*=1.4},
+{n:'❤️ Макс. HP +25 и лечение',f:p=>{p.mhp+=25;p.hp=p.mhp}},
+{n:'🌀 Орбитальный клинок',f:p=>p.blades++,mx:p=>p.blades<6},
+{n:'💥 Нова (волна каждые 6с)',f:p=>p.nova++,mx:p=>p.nova<5}];
+let g=null,mode='menu';
+const show=id=>document.querySelectorAll('.ov').forEach(o=>o.classList.toggle('on',o.id===id));
+function menu(){mode='menu';$('mb').textContent=save.best;$('mc').textContent=save.coins;show('m')}
+function shop(){mode='menu';const b=$('sl');b.innerHTML='';for(const k in UP){const[n,base,d]=UP[k],lv=save.up[k],cost=base*(1+lv),bt=document.createElement('button');bt.textContent=`${n} ур.${lv} — ${d} (${cost}💰)`;bt.onclick=()=>{if(save.coins>=cost){save.coins-=cost;save.up[k]++;sv();shop()}};b.appendChild(bt)}$('sc').textContent=save.coins;show('sh')}
+const keys={};addEventListener('keydown',e=>keys[e.key.toLowerCase()]=1);addEventListener('keyup',e=>keys[e.key.toLowerCase()]=0);
+let joy=null,jv={x:0,y:0};
+cv.addEventListener('pointerdown',e=>{joy={id:e.pointerId,x:e.clientX,y:e.clientY,cx:e.clientX,cy:e.clientY}});
+cv.addEventListener('pointermove',e=>{if(!joy||e.pointerId!==joy.id)return;joy.cx=e.clientX;joy.cy=e.clientY;let dx=joy.cx-joy.x,dy=joy.cy-joy.y,l=Math.hypot(dx,dy),m=50;if(l>m){joy.x=joy.cx-dx/l*m;joy.y=joy.cy-dy/l*m;dx=dx/l*m;dy=dy/l*m}jv.x=dx/m;jv.y=dy/m});
+const upf=e=>{if(joy&&e.pointerId===joy.id){joy=null;jv.x=jv.y=0}};
+cv.addEventListener('pointerup',upf);cv.addEventListener('pointercancel',upf);
+function start(){const u=save.up;g={p:{x:0,y:0,hp:100+u.hp*20,mhp:100+u.hp*20,spd:150*(1+.05*u.spd),dmg:10*(1+.1*u.dmg),rate:1.6,cd:0,multi:1,pierce:0,mag:70*(1+.2*u.mag),xp:0,need:5,lv:1,blades:0,ang:0,nova:0,nt:3,inv:0},en:[],bl:[],gm:[],pt:[],tm:0,kills:0,sp:0,boss:1,shake:0,nv:null};mode='play';show(null)}
+function spawn(boss){const a=Math.random()*6.283,d=Math.max(W,H)*.65,t=g.tm,k=1+t/45,ty=Math.random();let e;
+if(boss)e={r:30,hp:60*k*(1+g.boss*.5),sp:55,c:'#f0f',xp:30,boss:1,dm:25};
+else if(t>40&&ty<.2)e={r:16,hp:30*k,sp:40,c:'#f80',xp:3,dm:15};
+else if(t>20&&ty<.4)e={r:8,hp:6*k,sp:110,c:'#ff0',xp:1,dm:8};
+else e={r:11,hp:10*k,sp:70,c:'#f35',xp:1,dm:10};
+e.x=g.p.x+Math.cos(a)*d;e.y=g.p.y+Math.sin(a)*d;e.mh=e.hp;e.h=0;e.bh=0;g.en.push(e)}
+function hurt(e,d){e.hp-=d;e.h=.1;if(e.hp<=0&&!e.dead){e.dead=1;g.kills++;g.gm.push({x:e.x,y:e.y,v:e.xp});if(e.boss)for(let i=0;i<6;i++)g.gm.push({x:e.x+Math.random()*40-20,y:e.y+Math.random()*40-20,v:5});if(Math.random()<.03)g.gm.push({x:e.x+6,y:e.y,v:0,h:1});if(g.pt.length<200)for(let i=0;i<6;i++)g.pt.push({x:e.x,y:e.y,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,l:.4,c:e.c})}}
+function lvl(){mode='pick';const pool=UPG.filter(u=>!u.mx||u.mx(g.p)).sort(()=>Math.random()-.5).slice(0,3),box=$('opts');box.innerHTML='';pool.forEach(u=>{const b=document.createElement('button');b.textContent=u.n;b.onclick=()=>{u.f(g.p);show(null);mode='play'};box.appendChild(b)});show('lv')}
+function die(){mode='over';const c=Math.floor(g.tm/5+g.kills/4),nb=(g.tm|0)>save.best;save.coins+=c;save.best=Math.max(save.best,g.tm|0);sv();$('rs').innerHTML=`Время: ${g.tm|0} сек${nb?' 🏆 НОВЫЙ РЕКОРД':''}<br>Убито: ${g.kills}<br>Заработано: ${c} 💰`;show('ov')}
+function upd(dt){const p=g.p;g.tm+=dt;g.shake=Math.max(0,g.shake-dt);
+let mx=jv.x+(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),my=jv.y+(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0);const l=Math.hypot(mx,my);if(l>1){mx/=l;my/=l}
+p.x+=mx*p.spd*dt;p.y+=my*p.spd*dt;
+g.sp-=dt;if(g.sp<=0){g.sp=Math.max(.1,.8-g.tm/120);const n=1+(g.tm/60|0);for(let i=0;i<n&&g.en.length<300;i++)spawn()}
+if(g.tm>g.boss*60){spawn(1);g.boss++}
+p.cd-=dt;if(p.cd<=0){let b=null,bd=520*520;for(const e of g.en){const d=(e.x-p.x)**2+(e.y-p.y)**2;if(d<bd){bd=d;b=e}}
+if(b){const a=Math.atan2(b.y-p.y,b.x-p.x);for(let i=0;i<p.multi;i++){const o=(i-(p.multi-1)/2)*.18;g.bl.push({x:p.x,y:p.y,vx:Math.cos(a+o)*460,vy:Math.sin(a+o)*460,l:1.2,pi:p.pierce,hit:[]})}p.cd=1/p.rate}else p.cd=.1}
+for(const b of g.bl){b.x+=b.vx*dt;b.y+=b.vy*dt;b.l-=dt;for(const e of g.en){if(e.dead||b.hit.includes(e))continue;if((e.x-b.x)**2+(e.y-b.y)**2<(e.r+4)**2){hurt(e,p.dmg);b.hit.push(e);if(b.pi--<=0){b.l=0;break}}}}
+g.bl=g.bl.filter(b=>b.l>0);
+p.inv-=dt;p.ang+=dt*3;
+for(const e of g.en){if(e.dead)continue;e.h-=dt;e.bh-=dt;const dx=p.x-e.x,dy=p.y-e.y,d=Math.hypot(dx,dy)||1,s=e.sp*(1+g.tm/400);e.x+=dx/d*s*dt;e.y+=dy/d*s*dt;
+if(d<e.r+12&&p.inv<=0){p.hp-=e.dm;p.inv=.5;g.shake=.2;if(p.hp<=0)return die()}
+for(let i=0;i<p.blades;i++){const a=p.ang+i*6.283/p.blades,bx=p.x+Math.cos(a)*75,by=p.y+Math.sin(a)*75;if(e.bh<=0&&(e.x-bx)**2+(e.y-by)**2<(e.r+12)**2){hurt(e,p.dmg*.7);e.bh=.4}}}
+if(p.nova){p.nt-=dt;if(p.nt<=0){p.nt=6;g.nv={t:0,r:150+25*p.nova,x:p.x,y:p.y};for(const e of g.en)if((e.x-p.x)**2+(e.y-p.y)**2<g.nv.r**2)hurt(e,p.dmg*2.5)}}
+if(g.nv){g.nv.t+=dt*2.5;if(g.nv.t>=1)g.nv=null}
+g.en=g.en.filter(e=>!e.dead);
+for(const m of g.gm){const dx=p.x-m.x,dy=p.y-m.y,d=Math.hypot(dx,dy)||1;if(d<p.mag||m.f){m.f=1;m.x+=dx/d*420*dt;m.y+=dy/d*420*dt}if(d<14){m.d=1;if(m.h)p.hp=Math.min(p.mhp,p.hp+25);else p.xp+=m.v}}
+g.gm=g.gm.filter(m=>!m.d);
+for(const q of g.pt){q.x+=q.vx*dt;q.y+=q.vy*dt;q.l-=dt}g.pt=g.pt.filter(q=>q.l>0);
+if(p.xp>=p.need){p.xp-=p.need;p.lv++;p.need=Math.floor(p.need*1.35+3);lvl()}}
+const C=(x,y,r,c)=>{cx.fillStyle=c;cx.beginPath();cx.arc(x-ox,y-oy,r,0,6.283);cx.fill()};
+function draw(){cx.fillStyle='#0a0a18';cx.fillRect(0,0,W,H);if(!g)return;const p=g.p;ox=p.x-W/2+(Math.random()-.5)*g.shake*40;oy=p.y-H/2+(Math.random()-.5)*g.shake*40;
+cx.strokeStyle='#1a1a3a';cx.lineWidth=1;cx.beginPath();for(let x=((-ox%60)+60)%60;x<W;x+=60){cx.moveTo(x,0);cx.lineTo(x,H)}for(let y=((-oy%60)+60)%60;y<H;y+=60){cx.moveTo(0,y);cx.lineTo(W,y)}cx.stroke();
+for(const m of g.gm)C(m.x,m.y,m.h?6:4,m.h?'#f55':'#4f8');
+for(const e of g.en){C(e.x,e.y,e.r,e.h>0?'#fff':e.c);C(e.x,e.y,e.r*.5,'rgba(0,0,0,.35)');if(e.boss){cx.fillStyle='#400';cx.fillRect(e.x-ox-30,e.y-oy-44,60,6);cx.fillStyle='#f0f';cx.fillRect(e.x-ox-30,e.y-oy-44,60*Math.max(0,e.hp/e.mh),6)}}
+for(const b of g.bl)C(b.x,b.y,4,'#0ff');
+for(let i=0;i<p.blades;i++){const a=p.ang+i*6.283/p.blades;C(p.x+Math.cos(a)*75,p.y+Math.sin(a)*75,9,'#8cf')}
+if(g.nv){cx.strokeStyle=`rgba(255,200,0,${1-g.nv.t})`;cx.lineWidth=6;cx.beginPath();cx.arc(p.x-ox,p.y-oy,g.nv.r*g.nv.t,0,6.283);cx.stroke()}
+for(const q of g.pt)C(q.x,q.y,3,q.c);
+if(p.inv<=0||(p.inv*20|0)%2){C(p.x,p.y,13,'#0ff');C(p.x,p.y,5,'#fff')}
+cx.fillStyle='#222';cx.fillRect(0,0,W,8);cx.fillStyle='#4f8';cx.fillRect(0,0,W*p.xp/p.need,8);
+cx.fillStyle='#400';cx.fillRect(12,18,140,12);cx.fillStyle='#f35';cx.fillRect(12,18,140*Math.max(0,p.hp/p.mhp),12);
+cx.fillStyle='#fff';cx.font='bold 15px system-ui';cx.textAlign='right';cx.fillText(`${g.tm/60|0}:${String(g.tm%60|0).padStart(2,'0')}  ☠${g.kills}  Ур.${p.lv}`,W-12,30);
+if(joy){cx.strokeStyle='rgba(0,255,255,.4)';cx.lineWidth=3;cx.beginPath();cx.arc(joy.x,joy.y,50,0,6.283);cx.stroke();cx.fillStyle='rgba(0,255,255,.4)';cx.beginPath();cx.arc(joy.cx,joy.cy,20,0,6.283);cx.fill()}}
+let last=0;function loop(t){requestAnimationFrame(loop);const dt=Math.min((t-last)/1000,.05);last=t;if(mode==='play')upd(dt);if(g)draw()}
+menu();requestAnimationFrame(loop);
+</script></body></html>
